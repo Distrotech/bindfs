@@ -63,6 +63,9 @@
 #include <fuse.h>
 #include <fuse_opt.h>
 
+#include <malloc.h>
+#include <regex.h>
+
 #include "debug.h"
 #include "permchain.h"
 #include "userinfo.h"
@@ -79,6 +82,7 @@ static struct Settings {
     gid_t create_for_gid;
     const char *mntsrc;
     const char *mntdest;
+    regex_t *regex;
     int mntsrc_fd;
     
     char* original_working_dir;
@@ -205,6 +209,28 @@ static void signal_handler(int sig);
 
 static void atexit_func();
 
+uid_t regex_uid(const char *path) {
+	uid_t           uid=-1;
+	regmatch_t      *matches;
+	struct          passwd  *userpw;
+
+	if (!(matches = (regmatch_t *)malloc((settings.regex->re_nsub + 1)*sizeof(regmatch_t)))) {
+		return uid;
+	}
+	if ((regexec(settings.regex, path, settings.regex->re_nsub + 1, matches, 0) == 0) && (matches[1].rm_so != -1)) {
+		int     len;
+		len = matches[1].rm_eo-matches[1].rm_so;
+		char word[len];
+		strncpy(word,path+matches[1].rm_so,len+1);
+		word[len]=0;
+		userpw=getpwnam(word);
+		printf("Matched: %s",word);
+		uid=userpw->pw_uid;
+	}
+	free(matches);
+	return uid;
+}
+
 static int is_mirroring_enabled()
 {
     return settings.num_mirrored_users + settings.num_mirrored_members > 0;
@@ -324,6 +350,8 @@ static void chown_new_file(const char *path, struct fuse_context *fc, int (*chow
         file_owner = settings.create_for_uid;
     if (settings.create_for_gid != -1)
         file_group = settings.create_for_gid;
+    if (settings.regex)
+        file_owner=regex_uid(path);
 
     if ((file_owner != -1) || (file_group != -1)) {
         if (chown_func(path, file_owner, file_group) == -1) {
@@ -952,6 +980,7 @@ static void print_usage(const char *progname)
            "  --create-for-user         New files owned by specified user. *\n"
            "  --create-for-group        New files owned by specified group. *\n"
            "  --create-with-perms       Alter permissions of new files.\n"
+           "  --create-for-regex        New files owned by user found in path with regex supplied. *\n"
            "\n"
            "Chown policy:\n"
            "  --chown-normal            Try to chown the original files (the default).\n"
@@ -1323,6 +1352,10 @@ static void atexit_func()
     settings.mirrored_users = NULL;
     free(settings.mirrored_members);
     settings.mirrored_members = NULL;
+    if (settings.regex) {
+      regfree(settings.regex);
+      free(settings.regex);
+    }
 }
 
 int main(int argc, char *argv[])
@@ -1343,6 +1376,7 @@ int main(int argc, char *argv[])
         char *create_for_group;
         char *create_with_perms;
         char *chmod_filter;
+        char *create_for_regex;
         int no_allow_other;
         int multithreaded;
     } od;
@@ -1378,6 +1412,8 @@ int main(int argc, char *argv[])
         OPT_OFFSET2("--create-for-user=%s", "create-for-user=%s", create_for_user, -1),
         OPT_OFFSET2("--create-for-group=%s", "create-for-group=%s", create_for_group, -1),
         OPT_OFFSET2("--create-with-perms=%s", "create-with-perms=%s", create_with_perms, -1),
+        
+        OPT_OFFSET2("--create-for-regex=%s", "create-for-regex=%s", create_for_regex, -1),
         
         OPT2("--chown-normal", "chown-normal", OPTKEY_CHOWN_NORMAL),
         OPT2("--chown-ignore", "chown-ignore", OPTKEY_CHOWN_IGNORE),
@@ -1510,6 +1546,21 @@ int main(int argc, char *argv[])
             fprintf(stderr, "Not a valid group ID: %s\n", od.create_for_group);
             return 1;
         }
+    }
+    if (od.create_for_regex) {
+        if (getuid() != 0) {
+            fprintf(stderr, "Error: You need to be root to use --create-for-regex !\n");
+            return 1;
+        } else {
+            settings.regex=malloc(sizeof(regex_t)); 
+	    if (regcomp(settings.regex, od.create_for_regex, REG_EXTENDED) != 0) {
+               regfree(settings.regex);
+	       free(settings.regex);
+	       settings.regex = NULL;
+            }
+        }
+    } else {
+      settings.regex = NULL;
     }
 
     /* Parse mirrored users and groups */
