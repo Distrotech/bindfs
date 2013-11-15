@@ -78,7 +78,7 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
-noinst_PROGRAMS = readdir_inode$(EXEEXT)
+noinst_PROGRAMS = readdir_inode$(EXEEXT) utimens_nofollow$(EXEEXT)
 subdir = tests
 DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/Makefile.am \
 	$(top_srcdir)/depcomp $(top_srcdir)/test-driver
@@ -98,6 +98,9 @@ AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
+am_utimens_nofollow_OBJECTS = utimens_nofollow.$(OBJEXT)
+utimens_nofollow_OBJECTS = $(am_utimens_nofollow_OBJECTS)
+utimens_nofollow_LDADD = $(LDADD)
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -132,8 +135,8 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(readdir_inode_SOURCES)
-DIST_SOURCES = $(readdir_inode_SOURCES)
+SOURCES = $(readdir_inode_SOURCES) $(utimens_nofollow_SOURCES)
+DIST_SOURCES = $(readdir_inode_SOURCES) $(utimens_nofollow_SOURCES)
 RECURSIVE_TARGETS = all-recursive check-recursive cscopelist-recursive \
 	ctags-recursive dvi-recursive html-recursive info-recursive \
 	install-data-recursive install-dvi-recursive \
@@ -527,9 +530,7 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 readdir_inode_SOURCES = readdir_inode.c
-test_internals_CPPFLAGS = ${my_CPPFLAGS} ${fuse_CFLAGS}
-test_internals_CFLAGS = ${my_CFLAGS}
-test_internals_LDADD = ${my_LDFLAGS}
+utimens_nofollow_SOURCES = utimens_nofollow.c
 TESTS = test_bindfs.rb
 SUBDIRS = internals
 all: all-recursive
@@ -580,6 +581,10 @@ readdir_inode$(EXEEXT): $(readdir_inode_OBJECTS) $(readdir_inode_DEPENDENCIES) $
 	@rm -f readdir_inode$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(readdir_inode_OBJECTS) $(readdir_inode_LDADD) $(LIBS)
 
+utimens_nofollow$(EXEEXT): $(utimens_nofollow_OBJECTS) $(utimens_nofollow_DEPENDENCIES) $(EXTRA_utimens_nofollow_DEPENDENCIES) 
+	@rm -f utimens_nofollow$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(utimens_nofollow_OBJECTS) $(utimens_nofollow_LDADD) $(LIBS)
+
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
 
@@ -587,6 +592,7 @@ distclean-compile:
 	-rm -f *.tab.c
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/readdir_inode.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/utimens_nofollow.Po@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
